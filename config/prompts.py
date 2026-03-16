@@ -32,6 +32,14 @@ FILE: path/to/file.py
 ```
 
 Do not skip the FILE: header or the triple backticks.
+
+If you need to run a terminal command for research (e.g. git diff, ls, etc.), use this format:
+
+COMMAND: your_command_here
+
+If you need to search for text patterns across the repo, use:
+
+GREP: your_pattern_here
 """
 
 

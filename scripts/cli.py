@@ -23,19 +23,45 @@ def main():
     
     args = parser.parse_args()
     repo_path = os.path.abspath(args.repo)
+    
+    # Robust dotenv loading from project root
+    from dotenv import load_dotenv
+    project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+    load_dotenv(os.path.join(project_root, ".env"), override=True)
 
-    # Index once at startup
-    print(f"Indexing repository at {repo_path}...")
-    try:
-        from core.repo_indexer import build_index
-        vector_store = build_index(repo_path)
-    except Exception as e:
-        print(f"Error during indexing: {e}")
-        return
+    index_cache_path = os.path.join(repo_path, ".repo-agent", "index")
+    history_path = os.path.join(repo_path, ".repo-agent", "history.json")
+    
+    from core.vector_store import VectorStore
+    from core.repo_indexer import build_index
+    from core.memory_manager import MemoryManager
+
+    memory = MemoryManager(history_path)
+
+    if os.path.exists(index_cache_path + ".index"):
+        print(f"Loading cached index for {repo_path}...")
+        try:
+            vector_store = VectorStore.load(index_cache_path)
+        except Exception as e:
+            print(f"Failed to load index: {e}. Re-indexing...")
+            vector_store = build_index(repo_path)
+            vector_store.save(index_cache_path)
+    else:
+        print(f"Indexing repository at {repo_path}...")
+        try:
+            vector_store = build_index(repo_path)
+            vector_store.save(index_cache_path)
+        except Exception as e:
+            print(f"Error during indexing: {e}")
+            if "401" in str(e):
+                print("Tip: Check your OPENROUTER_API_KEY in .env")
+            return
 
     if args.task:
         print(f"Running task: {args.task}")
-        run_loop(repo_path, args.task, vector_store=vector_store)
+        memory.add_turn("user", args.task)
+        result = run_loop(repo_path, args.task, vector_store=vector_store, history=memory.get_context())
+        memory.add_turn("assistant", result)
     else:
         print(f"--- Welcome to Repo-Agent ---")
         print(f"Project root identified as: {repo_path}")
@@ -49,7 +75,9 @@ def main():
                 if task.lower() in ("exit", "quit"):
                     break
                 
-                run_loop(repo_path, task, vector_store=vector_store)
+                memory.add_turn("user", task)
+                result = run_loop(repo_path, task, vector_store=vector_store, history=memory.get_context())
+                memory.add_turn("assistant", result)
             except KeyboardInterrupt:
                 print("\nExiting...")
                 break

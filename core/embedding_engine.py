@@ -10,11 +10,18 @@ client = OpenAI(
     api_key=os.getenv("OPENROUTER_API_KEY")
 )
 
+EMBED_MODEL = os.getenv("EMBED_MODEL", "text-embedding-3-small")
+
 
 def embed(text):
 
+    model = EMBED_MODEL
+    # Ensure OpenRouter compatibility for OpenAI models
+    if "text-embedding" in model and "/" not in model:
+        model = f"openai/{model}"
+
     res = client.embeddings.create(
-        model="text-embedding-3-small",
+        model=model,
         input=text
     )
 

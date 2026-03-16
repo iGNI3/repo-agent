@@ -5,14 +5,15 @@ from core.file_search import search_files
 import re
 import os
 from core.file_editor import write_file
-
-
-from core.shell_tool import run_command
-
 from core.grep_tool import grep
 from core.shell_tool import run_command
+from core.state_manager import StateManager
 
 def run_agents(vector_store, task, history=None):
+    state = StateManager()
+    state.set("status", "planning")
+    state.set("current_task", task)
+    
     print("Planning...")
     # Get repository structure - CONSTANTLY USE .docs to avoid previous crash
     file_list = "\n".join(doc.get("path", "") for doc in vector_store.docs) if hasattr(vector_store, 'docs') else "No files indexed."
@@ -47,7 +48,7 @@ def process_response(response, plan, context):
     reviewed = review_code(plan, response)
 
     # 1. Handle GREP
-    grep_requests = re.findall(r"GREP:\s*(.*?)$", reviewed, re.MULTILINE)
+    grep_requests = re.findall(r"GREP:\s*(.*)$", reviewed, re.MULTILINE)
     for pattern in grep_requests:
         pattern = pattern.strip()
         print(f"\n[Agent Grep]: {pattern}")
@@ -57,7 +58,7 @@ def process_response(response, plan, context):
         # For now, we continue to file edits.
 
     # 2. Handle COMMANDS
-    commands = re.findall(r"COMMAND:\s*(.*?)$", reviewed, re.MULTILINE)
+    commands = re.findall(r"COMMAND:\s*(.*)$", reviewed, re.MULTILINE)
     for cmd in commands:
         cmd = cmd.strip()
         confirm = input(f"\nExecute command: {cmd}? (y/n): ").strip().lower()
@@ -65,7 +66,8 @@ def process_response(response, plan, context):
             print(run_command(cmd))
 
     # 3. Handle FILES
-    file_blocks = re.findall(r"FILE:\s*(.*?)\n```(?:\w+)?\n(.*?)\n```", reviewed, re.DOTALL)
+    # Flexible regex to handle different spacing/labels
+    file_blocks = re.findall(r"FILE:\s*([^\n\s]+).*?```(?:\w+)?\n(.*?)\n```", reviewed, re.DOTALL)
     if not file_blocks and not commands and not grep_requests:
         print("\nNo definitive actions taken.")
         return reviewed
@@ -79,7 +81,10 @@ def process_response(response, plan, context):
 
         confirm = input(f"\nApply changes to {file_path}? (y/n): ").strip().lower()
         if confirm == 'y':
-            write_file(file_path, new_content)
-            print(f"Successfully updated {file_path}")
+            success = write_file(file_path, new_content)
+            if success:
+                print(f"Successfully updated {file_path}")
+            else:
+                print(f"FAILED to update {file_path}. Check permissions or project root.")
 
     return "Plan execution complete."

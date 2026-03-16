@@ -1,15 +1,15 @@
 import subprocess
-import os
+import shlex
 
 def run_command(command):
     """
     Runs a shell command and returns the output.
     """
     try:
-        # Use shell=True for Windows compatibility
+        args = shlex.split(command)
         result = subprocess.run(
-            command,
-            shell=True,
+            args,
+            shell=False,
             capture_output=True,
             text=True,
             timeout=30
@@ -17,3 +17,4 @@ def run_command(command):
         return f"STDOUT:\n{result.stdout}\nSTDERR:\n{result.stderr}"
     except Exception as e:
         return f"Error executing command: {e}"
+
